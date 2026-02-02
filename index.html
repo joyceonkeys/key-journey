@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Key Journey - 琴鍵旅程 (加強版)</title>
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', 'Microsoft JhengHei', 'PingFang TC', system-ui, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    
+    #root {
+      width: 100%;
+      min-height: 100vh;
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+    
+    /* Storage Info Banner */
+    .storage-info {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      padding: 12px 20px;
+      text-align: center;
+      font-size: 13px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }
+    
+    .storage-info strong {
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <!-- Storage Info Banner -->
+  <div class="storage-info">
+    ✅ <strong>資料自動儲存中</strong> - 所有內容都安全地存在你的瀏覽器裡 | 💾 建議定期匯出備份
+  </div>
+  
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ENHANCED STORAGE SYSTEM with Backup/Restore
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    const STORAGE_KEY = "key-journey-data-v3";
+    const STORAGE_VERSION = "3.1";
+
+    const storage = {
+      async get(key) {
+        try {
+          const value = localStorage.getItem(key);
+          return value ? { value } : null;
+        } catch (e) {
+          console.error("Storage get error:", e);
+          return null;
+        }
+      },
+      
+      async set(key, value) {
+        try {
+          localStorage.setItem(key, value);
+          return true;
+        } catch (e) {
+          console.error("Storage set error:", e);
+          alert("⚠️ 儲存失敗！可能是儲存空間已滿，請匯出備份並清理資料。");
+          return false;
+        }
+      },
+      
+      getStorageSize() {
+        let total = 0;
+        for (let key in localStorage) {
+          if (localStorage.hasOwnProperty(key)) {
+            total += localStorage[key].length + key.length;
+          }
+        }
+        return (total / 1024).toFixed(2); // KB
+      }
+    };
+
+    async function loadData() {
+      try {
+        const result = await storage.get(STORAGE_KEY);
+        if (result) {
+          const data = JSON.parse(result.value);
+          console.log("✅ 資料載入成功！");
+          console.log(`📊 資料大小: ${storage.getStorageSize()} KB`);
+          return data;
+        }
+      } catch (e) {
+        console.error("❌ 載入錯誤:", e);
+      }
+      return null;
+    }
+
+    async function saveData(data) {
+      try {
+        data.version = STORAGE_VERSION;
+        data.lastSaved = Date.now();
+        const success = await storage.set(STORAGE_KEY, JSON.stringify(data));
+        if (success) {
+          console.log("💾 資料已自動儲存", new Date().toLocaleTimeString());
+        }
+      } catch (e) {
+        console.error("❌ 儲存錯誤:", e);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BACKUP & RESTORE FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    function exportBackup(data) {
+      try {
+        const backup = {
+          version: STORAGE_VERSION,
+          exportDate: new Date().toISOString(),
+          data: data
+        };
+        
+        const dataStr = JSON.stringify(backup, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `KeyJourney-備份-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        return true;
+      } catch (e) {
+        console.error("匯出失敗:", e);
+        return false;
+      }
+    }
+
+    function importBackup(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+          try {
+            const backup = JSON.parse(e.target.result);
+            if (backup.data) {
+              resolve(backup.data);
+            } else {
+              reject(new Error("備份檔案格式錯誤"));
+            }
+          } catch (error) {
+            reject(error);
+          }
+        };
+        
+        reader.onerror = () => reject(new Error("檔案讀取失敗"));
+        reader.readAsText(file);
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // UTILITY FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    function uid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    }
+
+    function formatDate(d) {
+      return new Date(d).toLocaleDateString("zh-TW", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CONSTANTS (Same as before)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    const COMPOSERS = [
+      { zh: "巴赫", en: "Bach" }, { zh: "莫札特", en: "Mozart" }, { zh: "貝多芬", en: "Beethoven" },
+      { zh: "蕭邦", en: "Chopin" }, { zh: "舒伯特", en: "Schubert" }, { zh: "舒曼", en: "Schumann" },
+      { zh: "李斯特", en: "Liszt" }, { zh: "德布西", en: "Debussy" }, { zh: "拉威爾", en: "Ravel" },
+      { zh: "柴可夫斯基", en: "Tchaikovsky" }, { zh: "穆索斯基", en: "Mussorgsky" }, { zh: "葛利格", en: "Grieg" },
+      { zh: "布拉姆斯", en: "Brahms" }, { zh: "孟德爾頌", en: "Mendelssohn" }, { zh: "拉赫曼尼諾夫", en: "Rachmaninoff" },
+      { zh: "普羅高菲夫", en: "Prokofiev" }, { zh: "巴爾托克", en: "Bartók" }, { zh: "蕭士塔高維契", en: "Shostakovich" },
+      { zh: "史卡拉第", en: "Scarlatti" }, { zh: "韓德爾", en: "Handel" }, { zh: "海頓", en: "Haydn" },
+      { zh: "車爾尼", en: "Czerny" }, { zh: "克萊曼第", en: "Clementi" }, { zh: "薩替", en: "Satie" },
+      { zh: "其他", en: "Other" },
+    ];
+
+    const PERIODS = [
+      { zh: "巴洛克時期", en: "Baroque", icon: "🏛️" },
+      { zh: "古典時期", en: "Classical", icon: "🎭" },
+      { zh: "浪漫時期", en: "Romantic", icon: "🌹" },
+      { zh: "印象樂派", en: "Impressionism", icon: "🎨" },
+      { zh: "二十世紀", en: "20th Century", icon: "🌆" },
+    ];
+
+    const STYLES = [
+      { zh: "奏鳴曲", en: "Sonata" }, { zh: "前奏曲", en: "Prelude" }, { zh: "圓舞曲", en: "Waltz" },
+      { zh: "進行曲", en: "March" }, { zh: "夜曲", en: "Nocturne" }, { zh: "幻想曲", en: "Fantasy" },
+      { zh: "練習曲", en: "Étude" }, { zh: "間奏曲", en: "Intermezzo" }, { zh: "即興曲", en: "Impromptu" },
+      { zh: "其他", en: "Other" },
+    ];
+
+    const CATEGORIES = [
+      { zh: "練習曲", en: "Etudes", icon: "💪" },
+      { zh: "巴洛克時期", en: "Baroque", icon: "🏛️" },
+      { zh: "古典時期", en: "Classical", icon: "🎭" },
+      { zh: "浪漫時期", en: "Romantic", icon: "🌹" },
+      { zh: "印象樂派", en: "Impressionism", icon: "🎨" },
+      { zh: "二十世紀", en: "20th Century", icon: "🌆" },
+    ];
+
+    const STATUSES = [
+      { zh: "練習中", en: "Practicing", color: "#f59e0b", bg: "#fef3c7" },
+      { zh: "已完成", en: "Completed", color: "#10b981", bg: "#d1fae5" },
+      { zh: "已精通", en: "Mastered", color: "#8b5cf6", bg: "#ede9fe" },
+    ];
+
+    // Sample repertoire (simplified for demo)
+    const REPERTOIRE_DB = [
+      { zhName: "給愛麗絲", enName: "Für Elise", composerIdx: 2, periodIdx: 1, styleIdx: 8, difficulty: 5, opus: "WoO 59", categoryIdx: 2 },
+      { zhName: "月光奏鳴曲", enName: "Moonlight Sonata", composerIdx: 2, periodIdx: 1, styleIdx: 0, difficulty: 6, opus: "Op.27 No.2", categoryIdx: 2 },
+      { zhName: "小狗圓舞曲", enName: "Minute Waltz", composerIdx: 3, periodIdx: 2, styleIdx: 2, difficulty: 7, opus: "Op.64 No.1", categoryIdx: 3 },
+      { zhName: "降E大調夜曲", enName: "Nocturne in Eb", composerIdx: 3, periodIdx: 2, styleIdx: 4, difficulty: 6, opus: "Op.9 No.2", categoryIdx: 3 },
+      { zhName: "月光", enName: "Clair de Lune", composerIdx: 7, periodIdx: 3, styleIdx: 8, difficulty: 6, opus: "L.75", categoryIdx: 4 },
+      { zhName: "土耳其進行曲", enName: "Turkish March", composerIdx: 1, periodIdx: 1, styleIdx: 3, difficulty: 6, opus: "K.331", categoryIdx: 2 },
+      { zhName: "革命練習曲", enName: "Revolutionary Etude", composerIdx: 3, periodIdx: 2, styleIdx: 6, difficulty: 9, opus: "Op.10 No.12", categoryIdx: 0 },
+      { zhName: "愛之夢", enName: "Liebestraum", composerIdx: 6, periodIdx: 2, styleIdx: 4, difficulty: 7, opus: "S.541", categoryIdx: 3 },
+      { zhName: "創意曲 第一號", enName: "Invention No.1", composerIdx: 0, periodIdx: 0, styleIdx: 8, difficulty: 4, opus: "BWV 772", categoryIdx: 1 },
+      { zhName: "夢幻曲", enName: "Träumerei", composerIdx: 5, periodIdx: 2, styleIdx: 8, difficulty: 5, opus: "Op.15 No.7", categoryIdx: 3 },
+    ];
+
+    function getRepertoirePiece(idx) {
+      const p = REPERTOIRE_DB[idx];
+      return {
+        id: `rep_${idx}_${Date.now()}`,
+        zhName: p.zhName,
+        enName: p.enName,
+        composer: COMPOSERS[p.composerIdx],
+        period: PERIODS[p.periodIdx],
+        style: STYLES[p.styleIdx],
+        category: CATEGORIES[p.categoryIdx],
+        difficulty: p.difficulty,
+        opus: p.opus,
+        status: 0,
+        addedDate: Date.now(),
+      };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // MAIN APP COMPONENT
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    function KeyJourney() {
+      const [challenger, setChallenger] = useState(null);
+      const [pieces, setPieces] = useState([]);
+      const [practiceLogs, setPracticeLogs] = useState([]);
+      const [page, setPage] = useState("welcome");
+      const [selectedPiece, setSelectedPiece] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [showSettings, setShowSettings] = useState(false);
+
+      // Load data on mount
+      useEffect(() => {
+        (async () => {
+          const data = await loadData();
+          if (data) {
+            setChallenger(data.challenger || null);
+            setPieces(data.pieces || []);
+            setPracticeLogs(data.practiceLogs || []);
+            if (data.challenger) setPage("home");
+          }
+          setLoading(false);
+        })();
+      }, []);
+
+      // Auto-save on changes
+      useEffect(() => {
+        if (loading) return;
+        saveData({ challenger, pieces, practiceLogs });
+      }, [challenger, pieces, practiceLogs, loading]);
+
+      // Export backup
+      const handleExport = () => {
+        const success = exportBackup({ challenger, pieces, practiceLogs });
+        if (success) {
+          alert("✅ 備份匯出成功！\n\n檔案已下載，請妥善保存。");
+        } else {
+          alert("❌ 匯出失敗，請再試一次。");
+        }
+      };
+
+      // Import backup
+      const handleImport = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+          const data = await importBackup(file);
+          
+          if (confirm("⚠️ 匯入備份會覆蓋目前的所有資料！\n\n確定要繼續嗎？")) {
+            setChallenger(data.challenger || null);
+            setPieces(data.pieces || []);
+            setPracticeLogs(data.practiceLogs || []);
+            alert("✅ 資料還原成功！");
+            setShowSettings(false);
+            if (data.challenger) setPage("home");
+          }
+        } catch (error) {
+          alert("❌ 匯入失敗：" + error.message);
+        }
+        
+        e.target.value = ''; // Reset file input
+      };
+
+      // Clear all data
+      const handleClearData = () => {
+        if (confirm("⚠️ 確定要清除所有資料嗎？\n\n這個動作無法復原！建議先匯出備份。")) {
+          if (confirm("⚠️ 最後確認：真的要清除所有資料嗎？")) {
+            localStorage.removeItem(STORAGE_KEY);
+            setChallenger(null);
+            setPieces([]);
+            setPracticeLogs([]);
+            setPage("welcome");
+            alert("✅ 所有資料已清除");
+            setShowSettings(false);
+          }
+        }
+      };
+
+      if (loading) {
+        return (
+          <div style={styles.fullScreen}>
+            <div style={{ fontSize: 40 }}>🎹</div>
+            <p style={{ color: "#94a3b8", marginTop: 12 }}>載入中...</p>
+            <p style={{ color: "#64748b", fontSize: 12, marginTop: 8 }}>
+              正在從 LocalStorage 讀取資料
+            </p>
+          </div>
+        );
+      }
+
+      if (!challenger) {
+        return <WelcomePage onStart={setChallenger} />;
+      }
+
+      return (
+        <>
+          {page === "home" && (
+            <HomePage
+              challenger={challenger}
+              pieces={pieces}
+              practiceLogs={practiceLogs}
+              onNav={setPage}
+              onSelectPiece={(p) => { setSelectedPiece(p); setPage("detail"); }}
+              onShowSettings={() => setShowSettings(true)}
+            />
+          )}
+          {page === "explore" && (
+            <ExplorePage
+              pieces={pieces}
+              onAddPiece={(p) => { setPieces([p, ...pieces]); setPage("home"); }}
+              onNav={setPage}
+            />
+          )}
+          {page === "detail" && selectedPiece && (
+            <DetailPage
+              piece={selectedPiece}
+              logs={practiceLogs.filter(l => l.pieceId === selectedPiece.id)}
+              onAddLog={(log) => setPracticeLogs([log, ...practiceLogs])}
+              onUpdatePiece={(updated) => {
+                setPieces(pieces.map(p => p.id === updated.id ? updated : p));
+                setSelectedPiece(updated);
+              }}
+              onNav={setPage}
+            />
+          )}
+          
+          {/* Settings Modal */}
+          {showSettings && (
+            <SettingsModal
+              onClose={() => setShowSettings(false)}
+              onExport={handleExport}
+              onImport={handleImport}
+              onClearData={handleClearData}
+              storageSize={storage.getStorageSize()}
+            />
+          )}
+        </>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SETTINGS MODAL COMPONENT
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    function SettingsModal({ onClose, onExport, onImport, onClearData, storageSize }) {
+      return (
+        <div style={styles.modalOverlay} onClick={onClose}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>
+                ⚙️ 設定與備份
+              </h2>
+              <button onClick={onClose} style={styles.closeBtn}>×</button>
+            </div>
+            
+            {/* Storage Info */}
+            <div style={styles.infoCard}>
+              <p style={{ fontSize: 14, color: "#94a3b8", margin: 0 }}>
+                💾 <strong style={{ color: "#f1f5f9" }}>儲存狀態：</strong>
+              </p>
+              <p style={{ fontSize: 13, color: "#64748b", margin: "8px 0 0" }}>
+                ✅ 資料自動儲存在瀏覽器的 LocalStorage
+              </p>
+              <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 0" }}>
+                📊 目前使用空間：<strong style={{ color: "#10b981" }}>{storageSize} KB</strong>
+              </p>
+              <p style={{ fontSize: 12, color: "#64748b", margin: "8px 0 0", fontStyle: "italic" }}>
+                ⚠️ 注意：清除瀏覽器資料會刪除所有記錄
+              </p>
+            </div>
+            
+            {/* Backup Actions */}
+            <div style={{ marginTop: 20 }}>
+              <button style={styles.actionBtn} onClick={onExport}>
+                <span style={{ fontSize: 20 }}>📥</span>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, color: "#f1f5f9" }}>匯出備份</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+                    下載 JSON 檔案，包含所有資料
+                  </p>
+                </div>
+              </button>
+              
+              <label style={styles.actionBtn}>
+                <span style={{ fontSize: 20 }}>📤</span>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, color: "#f1f5f9" }}>匯入備份</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+                    從備份檔案還原資料
+                  </p>
+                </div>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={onImport}
+                  style={{ display: "none" }}
+                />
+              </label>
+              
+              <button
+                style={{ ...styles.actionBtn, background: "#7f1d1d", borderColor: "#991b1b" }}
+                onClick={onClearData}
+              >
+                <span style={{ fontSize: 20 }}>🗑️</span>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, color: "#f1f5f9" }}>清除所有資料</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "#fca5a5" }}>
+                    永久刪除所有記錄（無法復原）
+                  </p>
+                </div>
+              </button>
+            </div>
+            
+            {/* Tips */}
+            <div style={{ ...styles.infoCard, background: "#1e293b", marginTop: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9", margin: "0 0 8px" }}>
+                💡 備份建議：
+              </p>
+              <ul style={{ fontSize: 12, color: "#94a3b8", margin: 0, paddingLeft: 20 }}>
+                <li style={{ marginBottom: 4 }}>定期匯出備份（建議每月一次）</li>
+                <li style={{ marginBottom: 4 }}>重要資料請保存多份備份</li>
+                <li style={{ marginBottom: 4 }}>清除瀏覽器前記得先備份</li>
+                <li>換電腦時記得帶走備份檔</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Continue with other page components (WelcomePage, HomePage, etc.)
+    // [Same as the previous version, but HomePage needs a settings button]
+    
+    function WelcomePage({ onStart }) {
+      const [name, setName] = useState("");
+      
+      return (
+        <div style={styles.fullScreen}>
+          <div style={{ textAlign: "center", maxWidth: 380, padding: 24 }}>
+            <div style={{ fontSize: 52 }}>🎹</div>
+            <h1 style={{ fontSize: 34, fontWeight: 800, color: "#fff", margin: "8px 0" }}>
+              Key Journey
+            </h1>
+            <p style={{ fontSize: 16, color: "#6366f1", margin: "6px 0" }}>琴鍵旅程</p>
+            <p style={{ fontSize: 14, color: "#94a3b8", margin: "18px 0", lineHeight: 1.6 }}>
+              開始你的音樂旅程，收集每一首讓你難忘的琴曲。
+            </p>
+            
+            <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 16, margin: "24px 0", textAlign: "left" }}>
+              <p style={{ fontSize: 13, color: "#10b981", margin: "0 0 8px", fontWeight: 600 }}>
+                ✅ 資料安全儲存
+              </p>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+                • 所有資料自動存在你的瀏覽器中<br />
+                • 關閉視窗後資料仍然保留<br />
+                • 可隨時匯出備份檔案<br />
+                • 完全隱私，不上傳任何資料
+              </p>
+            </div>
+            
+            <input
+              placeholder="輸入你的名字"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={styles.input}
+            />
+            
+            <button
+              onClick={() => name.trim() && onStart({ zhName: name.trim(), startDate: Date.now(), avatar: "🎹" })}
+              style={styles.primaryBtn}
+              disabled={!name.trim()}
+            >
+              開始旅程 ✨
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function HomePage({ challenger, pieces, practiceLogs, onNav, onSelectPiece, onShowSettings }) {
+      const totalPieces = pieces.length;
+      const mastered = pieces.filter(p => p.status === 2).length;
+      const totalMin = practiceLogs.reduce((s, l) => s + (l.duration || 0), 0);
+      const totalHours = Math.floor(totalMin / 60);
+      
+      return (
+        <div style={styles.page}>
+          <div style={styles.topBar}>
+            <span style={{ fontSize: 16 }}>🎹</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: "#fff", flex: 1 }}>Key Journey</span>
+            <button onClick={onShowSettings} style={styles.settingsBtn}>
+              ⚙️
+            </button>
+          </div>
+          
+          <div style={styles.greetCard}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={styles.avatarCircle}>{challenger.avatar}</div>
+              <div>
+                <p style={{ margin: 0, fontSize: 15, color: "#cbd5e1" }}>你好，Welcome</p>
+                <h2 style={{ margin: 0, fontSize: 22, color: "#fff", fontWeight: 700 }}>
+                  {challenger.zhName}
+                </h2>
+              </div>
+            </div>
+            <p style={{ margin: "12px 0 0", fontSize: 12, color: "#64748b" }}>
+              💾 資料已自動儲存 | 📊 使用 {storage.getStorageSize()} KB
+            </p>
+          </div>
+          
+          <div style={{ display: "flex", gap: 10, margin: "16px 20px 0" }}>
+            <div style={styles.statCard}>
+              <span style={{ fontSize: 22 }}>🎵</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{totalPieces}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>收集曲目</span>
+            </div>
+            <div style={styles.statCard}>
+              <span style={{ fontSize: 22 }}>⭐</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{mastered}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>已精通</span>
+            </div>
+            <div style={styles.statCard}>
+              <span style={{ fontSize: 22 }}>⏱️</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{totalHours}h</span>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>總時數</span>
+            </div>
+          </div>
+          
+          <div style={{ display: "flex", gap: 10, margin: "16px 20px 0" }}>
+            <button style={styles.actionBtn} onClick={() => onNav("explore")}>
+              <span style={{ fontSize: 20 }}>🗺️</span>
+              <span style={{ fontSize: 13 }}>探索</span>
+            </button>
+            <button style={styles.actionBtn} onClick={onShowSettings}>
+              <span style={{ fontSize: 20 }}>💾</span>
+              <span style={{ fontSize: 13 }}>備份</span>
+            </button>
+          </div>
+          
+          <div style={{ margin: "28px 20px 40px" }}>
+            <h3 style={{ color: "#f1f5f9", fontSize: 16, marginBottom: 12 }}>最近收藏</h3>
+            {pieces.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 20px", background: "#1e293b", borderRadius: 16 }}>
+                <p style={{ fontSize: 40, margin: 0 }}>🎼</p>
+                <p style={{ color: "#94a3b8", fontSize: 14, margin: "12px 0" }}>
+                  還沒有收藏任何曲目
+                </p>
+                <p style={{ color: "#64748b", fontSize: 13 }}>
+                  點擊「探索」開始你的音樂旅程！
+                </p>
+              </div>
+            ) : (
+              pieces.slice(0, 5).map(p => (
+                <div key={p.id} style={styles.pieceCard} onClick={() => onSelectPiece(p)}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, color: "#f1f5f9", fontWeight: 600, fontSize: 15 }}>
+                      {p.zhName}
+                    </p>
+                    <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: 12 }}>
+                      {p.composer?.zh} · 難度 {p.difficulty}/10
+                    </p>
+                  </div>
+                  <span style={{
+                    background: STATUSES[p.status].bg,
+                    color: STATUSES[p.status].color,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: "4px 10px",
+                    borderRadius: 20,
+                  }}>
+                    {STATUSES[p.status].zh}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // [Include simplified ExplorePage and DetailPage - similar structure as before]
+    function ExplorePage({ pieces, onAddPiece, onNav }) {
+      const isCollected = (idx) => pieces.some(p => p.zhName === REPERTOIRE_DB[idx].zhName);
+      
+      return (
+        <div style={styles.page}>
+          <div style={styles.topBar}>
+            <button onClick={() => onNav("home")} style={styles.backBtn}>← 返回</button>
+            <span style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>探索曲目</span>
+          </div>
+          
+          <div style={{ padding: "20px" }}>
+            <p style={{ color: "#94a3b8", fontSize: 13, margin: "0 0 16px" }}>
+              從 {REPERTOIRE_DB.length} 首經典曲目中選擇
+            </p>
+            
+            {REPERTOIRE_DB.map((p, idx) => {
+              const collected = isCollected(idx);
+              
+              return (
+                <div key={idx} style={styles.reperCard}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, color: "#f1f5f9", fontWeight: 600, fontSize: 15 }}>
+                      {p.zhName}
+                    </p>
+                    <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: 13 }}>
+                      {p.enName}
+                    </p>
+                    <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 12 }}>
+                      {COMPOSERS[p.composerIdx].zh} · 難度 {p.difficulty}/10 · {p.opus}
+                    </p>
+                  </div>
+                  {collected ? (
+                    <span style={{
+                      background: "#10b981",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: "6px 12px",
+                      borderRadius: 20,
+                      flexShrink: 0,
+                    }}>
+                      ✓ 已收藏
+                    </span>
+                  ) : (
+                    <button
+                      style={styles.addSmallBtn}
+                      onClick={() => onAddPiece(getRepertoirePiece(idx))}
+                    >
+                      ＋
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function DetailPage({ piece, logs, onAddLog, onUpdatePiece, onNav }) {
+      const [showAddLog, setShowAddLog] = useState(false);
+      const [duration, setDuration] = useState(30);
+      const [notes, setNotes] = useState("");
+      
+      const totalMin = logs.reduce((s, l) => s + (l.duration || 0), 0);
+      
+      const handleAddLog = () => {
+        onAddLog({
+          id: uid(),
+          pieceId: piece.id,
+          date: new Date().toISOString().slice(0, 10),
+          duration: duration,
+          notes: notes.trim(),
+          createdAt: Date.now(),
+        });
+        setNotes("");
+        setDuration(30);
+        setShowAddLog(false);
+      };
+      
+      return (
+        <div style={styles.page}>
+          <div style={styles.topBar}>
+            <button onClick={() => onNav("home")} style={styles.backBtn}>← 返回</button>
+            <span style={{ fontSize: 17, fontWeight: 700, color: "#fff" }}>曲目詳情</span>
+          </div>
+          
+          <div style={styles.detailHeader}>
+            <h2 style={{ margin: 0, color: "#fff", fontSize: 20, fontWeight: 700 }}>
+              {piece.zhName}
+            </h2>
+            {piece.enName && (
+              <p style={{ margin: "4px 0 0", color: "#94a3b8", fontSize: 14 }}>{piece.enName}</p>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <span style={styles.tag}>{piece.composer?.zh}</span>
+              <span style={styles.tag}>難度 {piece.difficulty}/10</span>
+            </div>
+            
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              {STATUSES.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => onUpdatePiece({ ...piece, status: i })}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 20,
+                    border: piece.status === i ? `1px solid ${s.color}` : "1px solid #334155",
+                    background: piece.status === i ? s.bg : "#1e293b",
+                    color: piece.status === i ? s.color : "#64748b",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {piece.status === i ? "✓ " : ""}{s.zh}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <div style={{ display: "flex", gap: 12, margin: "16px 20px 0" }}>
+            <div style={styles.statCard}>
+              <span style={{ fontSize: 18 }}>📝</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{logs.length}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>記錄次數</span>
+            </div>
+            <div style={styles.statCard}>
+              <span style={{ fontSize: 18 }}>⏱️</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{totalMin}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>總時長(min)</span>
+            </div>
+          </div>
+          
+          <div style={{ padding: "0 20px 40px", marginTop: 20 }}>
+            {!showAddLog ? (
+              <button
+                style={{ ...styles.primaryBtn, background: "#334155", marginTop: 0 }}
+                onClick={() => setShowAddLog(true)}
+              >
+                ＋ 新增練習記錄
+              </button>
+            ) : (
+              <div style={{ background: "#1e293b", borderRadius: 14, padding: 16 }}>
+                <p style={{ color: "#f1f5f9", fontWeight: 600, margin: "0 0 10px", fontSize: 14 }}>
+                  新增練習記錄
+                </p>
+                <label style={{ display: "block", color: "#94a3b8", fontSize: 13, margin: "0 0 6px" }}>
+                  時長: {duration} 分鐘
+                </label>
+                <input
+                  type="range"
+                  min={5}
+                  max={180}
+                  step={5}
+                  value={duration}
+                  onChange={(e) => setDuration(parseInt(e.target.value))}
+                  style={{ width: "100%", accentColor: "#6366f1" }}
+                />
+                <label style={{ display: "block", color: "#94a3b8", fontSize: 13, margin: "10px 0 6px" }}>
+                  筆記
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="今天的心得..."
+                  rows={3}
+                  style={{ ...styles.input, resize: "vertical", minHeight: 80 }}
+                />
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button
+                    onClick={handleAddLog}
+                    style={{ ...styles.primaryBtn, flex: 1, margin: 0, padding: "10px 0" }}
+                  >
+                    儲存
+                  </button>
+                  <button
+                    onClick={() => setShowAddLog(false)}
+                    style={{
+                      flex: 0,
+                      padding: "10px 16px",
+                      borderRadius: 20,
+                      border: "1px solid #334155",
+                      background: "#1e293b",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ color: "#f1f5f9", fontSize: 16, marginBottom: 12 }}>練習記錄</h3>
+              {logs.length === 0 ? (
+                <p style={{ color: "#64748b", fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+                  還沒有練習記錄
+                </p>
+              ) : (
+                logs.map(log => (
+                  <div key={log.id} style={styles.logCard}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ color: "#cbd5e1", fontSize: 13 }}>
+                        📅 {formatDate(log.date)}
+                      </span>
+                      <span style={{ color: "#6366f1", fontSize: 13, fontWeight: 600 }}>
+                        ⏱️ {log.duration} min
+                      </span>
+                    </div>
+                    {log.notes && (
+                      <p style={{ color: "#94a3b8", fontSize: 13, margin: "8px 0 0", lineHeight: 1.5 }}>
+                        💬 {log.notes}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STYLES
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    const styles = {
+      fullScreen: {
+        minHeight: "100vh",
+        background: "linear-gradient(160deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      page: {
+        minHeight: "100vh",
+        background: "#0f172a",
+        paddingBottom: 40,
+      },
+      topBar: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "16px 20px",
+        background: "#0f172a",
+        borderBottom: "1px solid #1e293b",
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+      },
+      backBtn: {
+        background: "none",
+        border: "none",
+        color: "#6366f1",
+        fontSize: 14,
+        cursor: "pointer",
+        padding: 0,
+        fontFamily: "inherit",
+      },
+      settingsBtn: {
+        background: "none",
+        border: "none",
+        fontSize: 20,
+        cursor: "pointer",
+        padding: 8,
+      },
+      greetCard: {
+        margin: "16px 20px 0",
+        padding: 20,
+        background: "linear-gradient(135deg, #1e293b 0%, #1a1f3a 100%)",
+        borderRadius: 18,
+        border: "1px solid #334155",
+      },
+      avatarCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 24,
+      },
+      statCard: {
+        flex: 1,
+        background: "#1e293b",
+        borderRadius: 14,
+        padding: "14px 8px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
+        border: "1px solid #334155",
+      },
+      actionBtn: {
+        flex: 1,
+        background: "#1e293b",
+        border: "1px solid #334155",
+        borderRadius: 14,
+        padding: "16px 12px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        color: "#cbd5e1",
+        cursor: "pointer",
+        fontFamily: "inherit",
+      },
+      pieceCard: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 8,
+        padding: "14px 16px",
+        background: "#1e293b",
+        borderRadius: 14,
+        border: "1px solid #334155",
+        cursor: "pointer",
+      },
+      reperCard: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 10,
+        padding: "14px 16px",
+        background: "#1e293b",
+        borderRadius: 14,
+        border: "1px solid #334155",
+      },
+      detailHeader: {
+        margin: "16px 20px 0",
+        padding: 18,
+        background: "linear-gradient(135deg, #1e293b, #1a1f3a)",
+        borderRadius: 18,
+        border: "1px solid #334155",
+      },
+      tag: {
+        background: "#0f172a",
+        color: "#94a3b8",
+        fontSize: 12,
+        padding: "4px 10px",
+        borderRadius: 20,
+        border: "1px solid #334155",
+      },
+      logCard: {
+        marginTop: 8,
+        padding: "14px 16px",
+        background: "#1e293b",
+        borderRadius: 14,
+        border: "1px solid #334155",
+      },
+      input: {
+        width: "100%",
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid #334155",
+        background: "#0f172a",
+        color: "#f1f5f9",
+        fontSize: 14,
+        outline: "none",
+        fontFamily: "inherit",
+        marginTop: 12,
+      },
+      primaryBtn: {
+        display: "block",
+        width: "100%",
+        marginTop: 24,
+        padding: 14,
+        borderRadius: 14,
+        border: "none",
+        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "inherit",
+      },
+      addSmallBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        border: "none",
+        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+        color: "#fff",
+        fontSize: 18,
+        cursor: "pointer",
+        flexShrink: 0,
+      },
+      modalOverlay: {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(15, 23, 42, 0.8)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+        padding: 20,
+      },
+      modalContent: {
+        background: "#0f172a",
+        border: "1px solid #334155",
+        borderRadius: 20,
+        padding: 24,
+        maxWidth: 500,
+        width: "100%",
+        maxHeight: "90vh",
+        overflowY: "auto",
+      },
+      closeBtn: {
+        background: "none",
+        border: "none",
+        color: "#94a3b8",
+        fontSize: 28,
+        cursor: "pointer",
+        padding: 0,
+        width: 32,
+        height: 32,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      infoCard: {
+        background: "#1e293b",
+        border: "1px solid #334155",
+        borderRadius: 12,
+        padding: 16,
+      },
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // RENDER APP
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<KeyJourney />);
+  </script>
+</body>
+</html>
